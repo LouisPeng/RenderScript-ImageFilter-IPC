@@ -5,7 +5,7 @@
  * 11:18:36 PM 2014
  */
 
-package cn.louispeng.imagefilter.binderservice;
+package cn.louispeng.imagefilter.binderserver;
 
 import android.app.Service;
 import android.content.Intent;
@@ -23,7 +23,7 @@ public class ImageFilterBinderService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        this.service = new IImageFilterServiceImpl();
+        this.service = new IImageFilterServiceImpl(this);
         Log.d(TAG, "onCreate()");
     }
 
