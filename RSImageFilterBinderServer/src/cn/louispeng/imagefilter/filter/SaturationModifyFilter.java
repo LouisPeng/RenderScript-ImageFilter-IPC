@@ -7,10 +7,10 @@
 
 package cn.louispeng.imagefilter.filter;
 
+import android.content.Context;
+import android.graphics.Bitmap;
 import cn.louispeng.imagefilter.binderserver.R;
 import cn.louispeng.imagefilter.renderscript.ScriptC_SaturationModifyFilter;
-
-import android.content.Context;
 
 /**
  * @author pengluyu
@@ -18,11 +18,11 @@ import android.content.Context;
 public class SaturationModifyFilter extends ImageFilter {
     private final float mSaturationFactor;
 
-    public SaturationModifyFilter(Context context, byte[] bitmapIn, byte[] bitmapOut) {
+    public SaturationModifyFilter(Context context, Bitmap bitmapIn, Bitmap bitmapOut) {
         this(context, bitmapIn, bitmapOut, 0.5f);
     }
 
-    public SaturationModifyFilter(Context context, byte[] bitmapIn, byte[] bitmapOut, float saturationFactor) {
+    public SaturationModifyFilter(Context context, Bitmap bitmapIn, Bitmap bitmapOut, float saturationFactor) {
         super(context, bitmapIn, bitmapOut);
         mSaturationFactor = saturationFactor;
     }

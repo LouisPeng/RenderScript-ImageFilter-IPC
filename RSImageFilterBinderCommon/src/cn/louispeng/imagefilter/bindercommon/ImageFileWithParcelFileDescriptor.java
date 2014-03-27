@@ -5,7 +5,7 @@ import android.os.Parcel;
 import android.os.ParcelFileDescriptor;
 import android.os.Parcelable;
 
-public class ImageFile implements Parcelable {
+public class ImageFileWithParcelFileDescriptor implements Parcelable {
 
     private final ParcelFileDescriptor mPFD;
 
@@ -15,7 +15,7 @@ public class ImageFile implements Parcelable {
 
     private final int mHeight;
 
-    public ImageFile(ParcelFileDescriptor pfd, long size, int width, int height) {
+    public ImageFileWithParcelFileDescriptor(ParcelFileDescriptor pfd, long size, int width, int height) {
         if (null == pfd) {
             throw new NullPointerException("pfd must not be null");
         }
@@ -52,17 +52,17 @@ public class ImageFile implements Parcelable {
         parcel.writeInt(mHeight);
     }
 
-    public static final Parcelable.Creator<ImageFile> CREATOR = new Parcelable.Creator<ImageFile>() {
-        public ImageFile createFromParcel(Parcel in) {
+    public static final Parcelable.Creator<ImageFileWithParcelFileDescriptor> CREATOR = new Parcelable.Creator<ImageFileWithParcelFileDescriptor>() {
+        public ImageFileWithParcelFileDescriptor createFromParcel(Parcel in) {
             ParcelFileDescriptor pfd = in.readParcelable(ParcelFileDescriptor.class.getClassLoader());
             long size = in.readLong();
             int width = in.readInt();
             int height = in.readInt();
-            return new ImageFile(pfd, size, width, height);
+            return new ImageFileWithParcelFileDescriptor(pfd, size, width, height);
         }
 
-        public ImageFile[] newArray(int size) {
-            return new ImageFile[size];
+        public ImageFileWithParcelFileDescriptor[] newArray(int size) {
+            return new ImageFileWithParcelFileDescriptor[size];
         }
     };
 }
