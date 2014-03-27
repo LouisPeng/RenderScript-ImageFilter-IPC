@@ -10,6 +10,8 @@ package cn.louispeng.imagefilter.binderserver;
 import cn.louispeng.imagefilter.bindercommon.FileDescriptorUtil;
 import cn.louispeng.imagefilter.bindercommon.IImageFilterService;
 import cn.louispeng.imagefilter.bindercommon.IImageFilterServiceResponseListener;
+import cn.louispeng.imagefilter.bindercommon.ImageFile;
+import cn.louispeng.imagefilter.bindercommon.ProfileUtil;
 import cn.louispeng.imagefilter.filter.ImageFilter;
 import cn.louispeng.imagefilter.filter.SaturationModifyFilter;
 
@@ -18,7 +20,7 @@ import android.graphics.Bitmap;
 import android.graphics.Bitmap.CompressFormat;
 import android.graphics.Bitmap.Config;
 import android.os.Environment;
-import android.os.ParcelFileDescriptor;
+import android.os.MemoryFile;
 import android.os.RemoteException;
 import android.util.Log;
 
@@ -79,21 +81,20 @@ public class IImageFilterServiceImpl extends IImageFilterService.Stub {
 
     /*
      * (non-Javadoc)
-     * @see
-     * cn.louispeng.imagefilter.bindercommon.IImageFilterService#filter(int,
-     * android.os.ParcelFileDescriptor, int, int,
-     * cn.louispeng.imagefilter.bindercommon
-     * .IImageFilterServiceResponseListener)
+     * @see cn.louispeng.imagefilter.bindercommon.IImageFilterService#filter(int,
+     * cn.louispeng.imagefilter.bindercommon.ImageFile, cn.louispeng.imagefilter.
+     * bindercommon.IImageFilterServiceResponseListener)
      */
     @Override
-    public void filter(final int effectID, final ParcelFileDescriptor pfd, final int width, final int height,
-            final IImageFilterServiceResponseListener listener) throws RemoteException {
+    public void filter(final int effectID, final ImageFile imageFile, final IImageFilterServiceResponseListener listener)
+            throws RemoteException {
         new Thread("Filter thread") {
             @Override
             public void run() {
                 int result = -1;
+                ProfileUtil.start(TAG);
                 Log.d(TAG, "filter() effectID = " + effectID);
-                FileDescriptor fd = pfd.getFileDescriptor();
+                FileDescriptor fd = imageFile.getParcelFileDescriptor().getFileDescriptor();
                 if (fd == null) {
                     Log.d(TAG, "Failed to get memeory file descriptor.");
                 } else {
@@ -103,29 +104,35 @@ public class IImageFilterServiceImpl extends IImageFilterService.Stub {
                     } catch (Exception e2) {
                         e2.printStackTrace();
                     }
+                    ProfileUtil.checkpoint("FileDescriptorUtil.read finish");
 
                     if (null != data) {
                         if (BuildConfig.DEBUG) {
-                            String outputFilepath = Environment.getExternalStorageDirectory() + "/test/"
-                                    + this.getClass().getSimpleName() + "-in.jpeg";
-                            outputBitmapDataArray(data, width, height, outputFilepath);
+                            String outputFilepath = Environment.getExternalStorageDirectory() + "/test/" + TAG
+                                    + "-in.jpeg";
+                            outputBitmapDataArray(data, imageFile.getWidth(), imageFile.getHeight(), outputFilepath);
                         }
 
                         byte[] outputDataBuffer = new byte[data.length];
                         ImageFilter filter = createImageFilter(effectID, data, outputDataBuffer);
                         filter.process();
+                        ProfileUtil.checkpoint("filter.process() finish");
 
                         if (BuildConfig.DEBUG) {
-                            String outputFilepath = Environment.getExternalStorageDirectory() + "/test/"
-                                    + this.getClass().getSimpleName() + "-out.jpeg";
-                            outputBitmapDataArray(outputDataBuffer, width, height, outputFilepath);
+                            String outputFilepath = Environment.getExternalStorageDirectory() + "/test/" + TAG
+                                    + "-out.jpeg";
+                            outputBitmapDataArray(outputDataBuffer, imageFile.getWidth(), imageFile.getHeight(),
+                                    outputFilepath);
                         }
 
                         try {
-                            FileDescriptorUtil.write(fd, outputDataBuffer);
-                        } catch (IOException e) {
-                            e.printStackTrace();
+                            MemoryFile file = new MemoryFile(fd, (int)imageFile.getSize());
+                            file.writeBytes(outputDataBuffer, 0, 0, outputDataBuffer.length);
+                        } catch (IOException e1) {
+                            e1.printStackTrace();
                         }
+
+                        ProfileUtil.checkpoint("FileDescriptorUtil.write finish");
                     }
                     result = 0;
                 }
@@ -136,6 +143,7 @@ public class IImageFilterServiceImpl extends IImageFilterService.Stub {
                     } catch (RemoteException e) {
                         e.printStackTrace();
                     }
+                    ProfileUtil.checkpoint("listener.onResponse finish");
                 }
             }
         }.start();

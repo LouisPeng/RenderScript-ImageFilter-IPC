@@ -1,11 +1,11 @@
 
 package cn.louispeng.imagefilter.binderclient;
 
-import cn.louispeng.imagefilter.bindercommon.FileDescriptorUtil;
 import cn.louispeng.imagefilter.bindercommon.FilterIDDefine;
 import cn.louispeng.imagefilter.bindercommon.IImageFilterService;
 import cn.louispeng.imagefilter.bindercommon.IImageFilterServiceResponseListener;
-import cn.louispeng.imagefilter.bindercommon.MemoryFileUtil;
+import cn.louispeng.imagefilter.bindercommon.ImageFile;
+import cn.louispeng.imagefilter.bindercommon.ProfileUtil;
 
 import android.app.Activity;
 import android.content.ComponentName;
@@ -50,28 +50,37 @@ public class MainActivity extends Activity implements ServiceConnection {
 
     private MemoryFile mFile;
 
-    private final static WeakReference<Handler> mResponseHandlerRef = new WeakReference<Handler>(new Handler() {
+    private final WeakReference<Handler> mResponseHandlerRef = new WeakReference<Handler>(new Handler() {
         @Override
         public void handleMessage(Message message) {
             switch (message.what) {
-                case RESPONSE_MESSAGE_ID:
+                case RESPONSE_MESSAGE_ID: {
                     Log.d(TAG, "Handling response");
+                    int result = message.arg1;
+                    if (0 == result) {
+                        // TODO
+                    }
 
+                    mFile.close();
+                    mFile = null;
                     break;
+                }
             }
         }
     });
 
     // the responsibility of the responseListener is to receive call-backs
-    // from the service when our FibonacciResponse is available
+    // from the service when result is available
     private final IImageFilterServiceResponseListener mResponseListener = new IImageFilterServiceResponseListener.Stub() {
         // this method is executed on one of the pooled binder threads
         @Override
         public void onResponse(int result) throws RemoteException {
+            ProfileUtil.checkpoint("AIDL callback in");
             Log.d(TAG, "Got response: " + result);
             Handler handler = mResponseHandlerRef.get();
             if (null != handler) {
-                Message message = handler.obtainMessage(RESPONSE_MESSAGE_ID, result);
+                Message message = handler.obtainMessage(RESPONSE_MESSAGE_ID);
+                message.arg1 = result;
                 handler.sendMessage(message);
             }
         }
@@ -89,42 +98,50 @@ public class MainActivity extends Activity implements ServiceConnection {
             @Override
             public void onClick(View v) {
                 if (null != mService) {
+                    ProfileUtil.start(TAG);
                     int BufferSize = mBitmapIn.getRowBytes() * mBitmapIn.getHeight();
                     ByteBuffer bitmapBuf = ByteBuffer.allocate(BufferSize);
                     bitmapBuf.order(ByteOrder.nativeOrder());
                     mBitmapIn.copyPixelsToBuffer(bitmapBuf);
                     try {
                         mFile = new MemoryFile("OutMemory", BufferSize);
-                    } catch (IOException ex) {
+                    } catch (IOException e) {
                         Log.i(TAG, "Failed to create memory file.");
-                        ex.printStackTrace();
+                        e.printStackTrace();
                     }
 
                     try {
                         mFile.writeBytes(bitmapBuf.array(), 0, 0, BufferSize);
-                    } catch (IOException e1) {
-                        e1.printStackTrace();
-                    }
-
-                    FileDescriptor fd = MemoryFileUtil.getFileDescriptor(mFile);
-                    ParcelFileDescriptor pfd = null;
-                    try {
-                        pfd = ParcelFileDescriptor.dup(fd);
-                    } catch (IOException e1) {
-                        e1.printStackTrace();
-                    }
-
-                    try {
-                        mService.filter(FilterIDDefine.BLACKWHITE, pfd, mBitmapIn.getWidth(), mBitmapIn.getHeight(),
-                                mResponseListener);
-                    } catch (RemoteException e) {
+                    } catch (IOException e) {
                         e.printStackTrace();
                     }
+
+                    ParcelFileDescriptor pfd = null;
+                    try {
+                        FileDescriptor fd = mFile.getFileDescriptor();
+                        pfd = ParcelFileDescriptor.dup(fd);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+
+                    if (null != pfd) {
+                        ImageFile imageFile = new ImageFile(pfd, BufferSize, mBitmapIn.getWidth(), mBitmapIn
+                                .getHeight());
+                        try {
+                            mService.filter(FilterIDDefine.BLACKWHITE, imageFile, mResponseListener);
+                        } catch (RemoteException e) {
+                            e.printStackTrace();
+                        }
+                    }
+
+                    ProfileUtil.checkpoint("AIDL call finish");
                 }
             }
         });
 
         out = (ImageView)findViewById(R.id.displayout);
+        out.setImageBitmap(mBitmapOut);
+        out.setVisibility(View.INVISIBLE);
     }
 
     @Override

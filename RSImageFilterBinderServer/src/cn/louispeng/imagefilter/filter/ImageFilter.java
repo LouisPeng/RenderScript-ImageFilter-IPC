@@ -45,6 +45,7 @@ public abstract class ImageFilter {
         mRS = RenderScript.create(mContext);
         Element rgba8888 = Element.RGBA_8888(mRS);
         mInAllocation = Allocation.createSized(mRS, rgba8888, mBitmapIn.length / 4);
+        mInAllocation.copyFrom(mBitmapIn);
         mOutAllocation = Allocation.createSized(mRS, rgba8888, mBitmapOut.length / 4);
     }
 
