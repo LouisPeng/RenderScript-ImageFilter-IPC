@@ -1,3 +1,4 @@
+
 package cn.louispeng.imagefilter.binderclient;
 
 import java.io.FileDescriptor;
@@ -11,6 +12,7 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.graphics.Bitmap;
+import android.graphics.Bitmap.Config;
 import android.graphics.BitmapFactory;
 import android.graphics.BitmapFactory.Options;
 import android.os.Bundle;
@@ -40,7 +42,9 @@ public class MainActivity extends Activity implements ServiceConnection {
 
     // the id of a message to our response handler
     private static final int RESPONSE_WITH_PARCELFILEDESCRIPTOR_MESSAGE_ID = 1;
+
     private static final int RESPONSE_WITH_DATA_MESSAGE_ID = 2;
+
     private static final int RESPONSE_WITH_FILEPATH_MESSAGE_ID = 3;
 
     private IImageFilterService mService;
@@ -52,6 +56,8 @@ public class MainActivity extends Activity implements ServiceConnection {
     private Bitmap mBitmapIn;
 
     private Bitmap mBitmapOut;
+
+    private int mTestIndex = 0;
 
     private boolean inProcess = false;
 
@@ -65,66 +71,63 @@ public class MainActivity extends Activity implements ServiceConnection {
         @Override
         public void handleMessage(Message message) {
             switch (message.what) {
-            case RESPONSE_WITH_PARCELFILEDESCRIPTOR_MESSAGE_ID: {
-                Log.d(TAG, "Handling response");
-                MainActivity activity = mActivity.get();
-                int result = message.arg1;
-                ImageFileWithParcelFileDescriptor imageFile = (ImageFileWithParcelFileDescriptor) message.obj;
-                if (0 == result) {
-                    FileDescriptor inFD = imageFile.getParcelFileDescriptor().getFileDescriptor();
-                    if (inFD == null) {
-                        Log.d(TAG, "Failed to get memeory file descriptor.");
-                    } else {
-                        byte[] data = null;
-                        try {
-                            data = FileUtils.read(inFD);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                            result = -1;
-                        }
+                case RESPONSE_WITH_PARCELFILEDESCRIPTOR_MESSAGE_ID: {
+                    Log.d(TAG, "Handling response");
+                    MainActivity activity = mActivity.get();
+                    int result = message.arg1;
+                    ImageFileWithParcelFileDescriptor imageFile = (ImageFileWithParcelFileDescriptor)message.obj;
+                    if (0 == result) {
+                        FileDescriptor inFD = imageFile.getParcelFileDescriptor().getFileDescriptor();
+                        if (inFD == null) {
+                            Log.d(TAG, "Failed to get memeory file descriptor.");
+                        } else {
+                            byte[] data = null;
+                            try {
+                                data = FileUtils.read(inFD);
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                                result = -1;
+                            }
 
-                        ByteBuffer buffer = ByteBuffer.wrap(data);
-                        activity.mBitmapOut.copyPixelsFromBuffer(buffer);
-                        activity.out.invalidate();
-                        activity.out.setVisibility(View.VISIBLE);
+                            ByteBuffer buffer = ByteBuffer.wrap(data);
+                        }
                     }
+                    activity.inProcess = false;
+                    break;
                 }
-                activity.inProcess = false;
-                break;
-            }
-            case RESPONSE_WITH_DATA_MESSAGE_ID: {
-                Log.d(TAG, "Handling response");
-                MainActivity activity = mActivity.get();
-                int result = message.arg1;
-                ImageFileWithData imageFile = (ImageFileWithData) message.obj;
-                if (0 == result) {
-                    ByteBuffer buffer = ByteBuffer.wrap(imageFile.getData());
-                    activity.mBitmapOut.copyPixelsFromBuffer(buffer);
-                    activity.out.invalidate();
-                    activity.out.setVisibility(View.VISIBLE);
-                }
-                activity.inProcess = false;
-                break;
-            }
-            case RESPONSE_WITH_FILEPATH_MESSAGE_ID: {
-                Log.d(TAG, "Handling response");
-                MainActivity activity = mActivity.get();
-                int result = message.arg1;
-                ImageFileWithFilepath imageFile = (ImageFileWithFilepath) message.obj;
-                if (0 == result) {
-                    String filepath = imageFile.getFilepath();
-                    if (filepath == null) {
-                        Log.d(TAG, "Failed to get filepath.");
-                    } else {
-                        activity.mBitmapOut = BitmapFactory.decodeFile(filepath);
-                        activity.out.setImageBitmap(activity.mBitmapOut);
-                        activity.out.invalidate();
-                        activity.out.setVisibility(View.VISIBLE);
+                case RESPONSE_WITH_DATA_MESSAGE_ID: {
+                    Log.d(TAG, "Handling response");
+                    MainActivity activity = mActivity.get();
+                    int result = message.arg1;
+                    ImageFileWithData imageFile = (ImageFileWithData)message.obj;
+                    if (0 == result) {
+                        ByteBuffer buffer = ByteBuffer.wrap(imageFile.getData());
+                        Bitmap bitmap = Bitmap.createBitmap(imageFile.getWidth(), imageFile.getHeight(),
+                                Config.ARGB_8888);
+                        bitmap.copyPixelsFromBuffer(buffer);
+                        buffer = null;
+                        bitmap.recycle();
                     }
+                    activity.inProcess = false;
+                    break;
                 }
-                activity.inProcess = false;
-                break;
-            }
+                case RESPONSE_WITH_FILEPATH_MESSAGE_ID: {
+                    Log.d(TAG, "Handling response");
+                    MainActivity activity = mActivity.get();
+                    int result = message.arg1;
+                    ImageFileWithFilepath imageFile = (ImageFileWithFilepath)message.obj;
+                    if (0 == result) {
+                        String filepath = imageFile.getFilepath();
+                        if (filepath == null) {
+                            Log.d(TAG, "Failed to get filepath.");
+                        } else {
+                            Bitmap outBitmap = BitmapFactory.decodeFile(filepath);
+                            outBitmap.recycle();
+                        }
+                    }
+                    activity.inProcess = false;
+                    break;
+                }
             }
         }
     }
@@ -136,7 +139,8 @@ public class MainActivity extends Activity implements ServiceConnection {
     private final IImageFilterServiceResponseListener mResponseListener = new IImageFilterServiceResponseListener.Stub() {
         // this method is executed on one of the pooled binder threads
         @Override
-        public void onResponseWithParcelFileDescriptor(int result, ImageFileWithParcelFileDescriptor imageFile) throws RemoteException {
+        public void onResponseWithParcelFileDescriptor(int result, ImageFileWithParcelFileDescriptor imageFile)
+                throws RemoteException {
             ProfileUtil.checkpoint("AIDL callback in");
             Log.d(TAG, "Got response: " + result);
             Message message = mHandler.obtainMessage(RESPONSE_WITH_PARCELFILEDESCRIPTOR_MESSAGE_ID);
@@ -172,27 +176,49 @@ public class MainActivity extends Activity implements ServiceConnection {
         setContentView(R.layout.activity_main);
 
         mBitmapIn = loadBitmap(R.raw.image2);
-        in = (ImageView) findViewById(R.id.displayin);
+        in = (ImageView)findViewById(R.id.displayin);
         in.setImageBitmap(mBitmapIn);
         in.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
                 if (null != mService && !inProcess) {
                     inProcess = true;
-//                    TestFilterWithParcelFileDescriptor();
-//                    TestFilterWithData();
-                    TestFilterWithFilepath();
+
+                    switch (mTestIndex) {
+                        case 0:
+                            TestFilterWithParcelFileDescriptor();
+                            break;
+                        case 1:
+                            // TestFilterWithData();
+                            inProcess = false;
+                            break;
+                        case 2:
+                            TestFilterWithFilepath();
+                            break;
+                        default:
+                            TestFilterWithParcelFileDescriptor();
+                            mTestIndex = 0;
+                            break;
+                    }
+
+                    mTestIndex++;
+
                 }
             }
 
             private void TestFilterWithParcelFileDescriptor() {
+                final String inputFilepath = Environment.getExternalStorageDirectory() + "/DCIM/Camera/IMAG0003.jpg";
                 ProfileUtil.start("IPC-Profile");
                 out.setVisibility(View.INVISIBLE);
-                int BufferSize = mBitmapIn.getRowBytes() * mBitmapIn.getHeight();
+                Bitmap inBitmap = BitmapFactory.decodeFile(inputFilepath);
+                ProfileUtil.checkpoint(TAG + " BitmapFactory.decodeFile");
+                int inWidth = inBitmap.getWidth();
+                int inHeight = inBitmap.getHeight();
+                int BufferSize = inBitmap.getRowBytes() * inBitmap.getHeight();
                 ByteBuffer bitmapBuf = ByteBuffer.allocate(BufferSize);
-                bitmapBuf.order(ByteOrder.nativeOrder());
-                mBitmapIn.copyPixelsToBuffer(bitmapBuf);
-                ProfileUtil.checkpoint(TAG + " mBitmapIn.copyPixelsToBuffer");
+                inBitmap.copyPixelsToBuffer(bitmapBuf);
+                inBitmap.recycle();
+                ProfileUtil.checkpoint(TAG + " inBitmap.copyPixelsToBuffer");
 
                 MemoryFile mFile = null;
                 try {
@@ -210,7 +236,6 @@ public class MainActivity extends Activity implements ServiceConnection {
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
-
                     ProfileUtil.checkpoint(TAG + " mFile.writeBytes()");
 
                     ParcelFileDescriptor pfd = null;
@@ -222,10 +247,11 @@ public class MainActivity extends Activity implements ServiceConnection {
                     }
 
                     if (null != pfd) {
-                        ImageFileWithParcelFileDescriptor imageFile = new ImageFileWithParcelFileDescriptor(pfd, BufferSize, mBitmapIn
-                                .getWidth(), mBitmapIn.getHeight());
+                        ImageFileWithParcelFileDescriptor imageFile = new ImageFileWithParcelFileDescriptor(pfd,
+                                BufferSize, inWidth, inHeight);
                         try {
-                            mService.filterWithParcelFileDescriptor(FilterIDDefine.BLACKWHITE, imageFile, mResponseListener);
+                            mService.filterWithParcelFileDescriptor(FilterIDDefine.BLACKWHITE, imageFile,
+                                    mResponseListener);
                         } catch (RemoteException e) {
                             e.printStackTrace();
                             inProcess = false;
@@ -247,7 +273,8 @@ public class MainActivity extends Activity implements ServiceConnection {
                 mBitmapIn.copyPixelsToBuffer(bitmapBuf);
                 ProfileUtil.checkpoint(TAG + " mBitmapIn.copyPixelsToBuffer");
 
-                ImageFileWithData imageFile = new ImageFileWithData(bitmapBuf.array(), mBitmapIn.getWidth(), mBitmapIn.getHeight());
+                ImageFileWithData imageFile = new ImageFileWithData(bitmapBuf.array(), mBitmapIn.getWidth(), mBitmapIn
+                        .getHeight());
                 try {
                     mService.filterWithData(FilterIDDefine.BLACKWHITE, imageFile, mResponseListener);
                 } catch (RemoteException e) {
@@ -265,7 +292,8 @@ public class MainActivity extends Activity implements ServiceConnection {
                 Options opts = new Options();
                 opts.inJustDecodeBounds = true;
                 BitmapFactory.decodeFile(inputFilepath, opts);
-                ImageFileWithFilepath imageFile = new ImageFileWithFilepath(inputFilepath, opts.outWidth, opts.outHeight);
+                ImageFileWithFilepath imageFile = new ImageFileWithFilepath(inputFilepath, opts.outWidth,
+                        opts.outHeight);
                 try {
                     mService.filterWithFilepath(FilterIDDefine.BLACKWHITE, imageFile, mResponseListener);
                 } catch (RemoteException e) {
@@ -277,7 +305,7 @@ public class MainActivity extends Activity implements ServiceConnection {
             }
         });
 
-        out = (ImageView) findViewById(R.id.displayout);
+        out = (ImageView)findViewById(R.id.displayout);
         mBitmapOut = Bitmap.createBitmap(mBitmapIn.getWidth(), mBitmapIn.getHeight(), mBitmapIn.getConfig());
         out.setImageBitmap(mBitmapOut);
         out.setVisibility(View.INVISIBLE);

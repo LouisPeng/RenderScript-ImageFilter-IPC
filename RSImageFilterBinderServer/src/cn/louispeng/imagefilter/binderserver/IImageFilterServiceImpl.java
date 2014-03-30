@@ -50,52 +50,21 @@ public class IImageFilterServiceImpl extends IImageFilterService.Stub {
     private ImageFilter createImageFilter(int effectID, Bitmap dataIn, Bitmap dataOut) {
         ImageFilter filter = null;
         switch (effectID) {
-        case FilterIDDefine.BLACKWHITE:
-            filter = new BlackWhiteFilter(mContext, dataIn, dataOut);
-            break;
-        case FilterIDDefine.SATURATION_MODIFY:
-            filter = new SaturationModifyFilter(mContext, dataIn, dataOut);
-            break;
-        default:
-            break;
+            case FilterIDDefine.BLACKWHITE:
+                filter = new BlackWhiteFilter(mContext, dataIn, dataOut);
+                break;
+            case FilterIDDefine.SATURATION_MODIFY:
+                filter = new SaturationModifyFilter(mContext, dataIn, dataOut);
+                break;
+            default:
+                break;
         }
 
         return filter;
     }
 
-    /**
-     * Save bitmap data to file
-     * 
-     * @param data
-     * @param width
-     * @param height
-     */
-    private void outputBitmapDataArray(final byte[] data, final int width, final int height, final String filepath) {
-        File outputFile = new File(filepath);
-        Bitmap outBitmap = Bitmap.createBitmap(width, height, Config.ARGB_8888);
-        outBitmap.copyPixelsFromBuffer(ByteBuffer.wrap(data));
-        FileOutputStream outStream = null;
-        try {
-            outStream = new FileOutputStream(outputFile);
-        } catch (FileNotFoundException e1) {
-            e1.printStackTrace();
-        }
-
-        if (null != outStream) {
-            if (!outBitmap.compress(CompressFormat.JPEG, 100, outStream)) {
-                Log.d(TAG, "Failed to get memeory file descriptor.");
-            }
-            try {
-                outStream.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
     /*
      * (non-Javadoc)
-     * 
      * @see cn.louispeng.imagefilter.bindercommon.IImageFilterService#filterWithParcelFileDescriptor(int,
      * cn.louispeng.imagefilter.bindercommon.ImageFileWithParcelFileDescriptor,
      * cn.louispeng.imagefilter.bindercommon.IImageFilterServiceResponseListener)
@@ -126,21 +95,27 @@ public class IImageFilterServiceImpl extends IImageFilterService.Stub {
                         e.printStackTrace();
                         result = -1;
                     }
-                    ProfileUtil.checkpoint(TAG + " FileDescriptorUtil.read");
+                    ProfileUtil.checkpoint(TAG + " FileDescriptorUtil.read()");
 
                     if (0 == result) {
-                        Bitmap inBitmap = Bitmap.createBitmap(imageFile.getWidth(), imageFile.getHeight(), Config.ARGB_8888);
+                        Bitmap inBitmap = Bitmap.createBitmap(imageFile.getWidth(), imageFile.getHeight(),
+                                Config.ARGB_8888);
                         inBitmap.copyPixelsFromBuffer(ByteBuffer.wrap(data));
+                        ProfileUtil.checkpoint(TAG + " inBitmap.copyPixelsFromBuffer()");
                         data = null;
 
-                        Bitmap outBitmap = Bitmap.createBitmap(imageFile.getWidth(), imageFile.getHeight(), Config.ARGB_8888);
+                        Bitmap outBitmap = Bitmap.createBitmap(inBitmap);
                         ImageFilter filter = createImageFilter(effectID, inBitmap, outBitmap);
                         filter.process();
                         ProfileUtil.checkpoint(TAG + " filter.process()");
-                        inBitmap.recycle();
+                        if (!inBitmap.sameAs(outBitmap)) {
+                            inBitmap.recycle();
+                        }
 
-                        ByteBuffer outputDataBuffer = ByteBuffer.allocate(outBitmap.getRowBytes() * outBitmap.getHeight());
+                        ByteBuffer outputDataBuffer = ByteBuffer.allocate(outBitmap.getRowBytes()
+                                * outBitmap.getHeight());
                         outBitmap.copyPixelsToBuffer(outputDataBuffer);
+                        ProfileUtil.checkpoint(TAG + " outBitmap.copyPixelsFromBuffer()");
                         outBitmap.recycle();
                         // Create MemoryFile for result
                         try {
@@ -161,12 +136,13 @@ public class IImageFilterServiceImpl extends IImageFilterService.Stub {
                                 result = -1;
                             }
 
+                            ProfileUtil.checkpoint(TAG + " FileDescriptorUtil.write");
+
                             if (0 == result) {
-                                resultImageFile = new ImageFileWithParcelFileDescriptor(outPFD, outputDataBuffer.capacity(),
-                                        imageFile.getWidth(), imageFile.getHeight());
+                                resultImageFile = new ImageFileWithParcelFileDescriptor(outPFD,
+                                        outputDataBuffer.capacity(), imageFile.getWidth(), imageFile.getHeight());
                             }
                         }
-                        ProfileUtil.checkpoint(TAG + " FileDescriptorUtil.write");
                     }
                 }
 
@@ -188,8 +164,8 @@ public class IImageFilterServiceImpl extends IImageFilterService.Stub {
     }
 
     @Override
-    public void filterWithData(final int effectID, final ImageFileWithData imageFile, final IImageFilterServiceResponseListener listener)
-            throws RemoteException {
+    public void filterWithData(final int effectID, final ImageFileWithData imageFile,
+            final IImageFilterServiceResponseListener listener) throws RemoteException {
         new Thread("FilterWithData thread") {
             @Override
             public void run() {
@@ -200,17 +176,22 @@ public class IImageFilterServiceImpl extends IImageFilterService.Stub {
 
                 Bitmap inBitmap = Bitmap.createBitmap(imageFile.getWidth(), imageFile.getHeight(), Config.ARGB_8888);
                 inBitmap.copyPixelsFromBuffer(ByteBuffer.wrap(imageFile.getData()));
-                Bitmap outBitmap = Bitmap.createBitmap(imageFile.getWidth(), imageFile.getHeight(), Config.ARGB_8888);
+                Bitmap outBitmap = Bitmap.createBitmap(inBitmap);
                 ImageFilter filter = createImageFilter(effectID, inBitmap, outBitmap);
                 filter.process();
                 ProfileUtil.checkpoint(TAG + " filter.process()");
-                inBitmap.recycle();
+                
+                if (!inBitmap.sameAs(outBitmap)) {
+                    inBitmap.recycle();
+                }
+                
                 ByteBuffer outputDataBuffer = ByteBuffer.allocate(outBitmap.getRowBytes() * outBitmap.getHeight());
                 outBitmap.copyPixelsToBuffer(outputDataBuffer);
                 outBitmap.recycle();
 
                 if (0 == result) {
-                    resultImageFile = new ImageFileWithData(outputDataBuffer.array(), imageFile.getWidth(), imageFile.getHeight());
+                    resultImageFile = new ImageFileWithData(outputDataBuffer.array(), imageFile.getWidth(),
+                            imageFile.getHeight());
                 }
 
                 ProfileUtil.checkpoint(TAG + " FileDescriptorUtil.write");
@@ -245,12 +226,14 @@ public class IImageFilterServiceImpl extends IImageFilterService.Stub {
                 ProfileUtil.checkpoint(TAG + " BitmapFactory.decodeFile");
 
                 if (0 == result) {
-                    Bitmap outBitmap = Bitmap.createBitmap(inBitmap.getWidth(), inBitmap.getHeight(), inBitmap.getConfig());
+                    Bitmap outBitmap = Bitmap.createBitmap(inBitmap);
                     ImageFilter filter = createImageFilter(effectID, inBitmap, outBitmap);
                     filter.process();
-                    inBitmap.recycle();
                     ProfileUtil.checkpoint(TAG + " filter.process()");
-
+                    if (!inBitmap.sameAs(outBitmap)) {
+                        inBitmap.recycle();
+                    }
+                    
                     // Create MemoryFile for result
                     String outFilepath = inFile.getAbsolutePath() + "out.jpeg";
                     try {
@@ -261,12 +244,12 @@ public class IImageFilterServiceImpl extends IImageFilterService.Stub {
                     }
 
                     ProfileUtil.checkpoint(TAG + " outBitmap.compress");
-
                     outBitmap.recycle();
 
                     if (0 == result) {
                         if (0 == result) {
-                            resultImageFile = new ImageFileWithFilepath(outFilepath, imageFile.getWidth(), imageFile.getHeight());
+                            resultImageFile = new ImageFileWithFilepath(outFilepath, imageFile.getWidth(),
+                                    imageFile.getHeight());
                         }
                     }
                 }

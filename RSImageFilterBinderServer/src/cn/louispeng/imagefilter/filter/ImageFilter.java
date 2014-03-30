@@ -26,8 +26,6 @@ public abstract class ImageFilter {
 
     protected final Bitmap mBitmapOut;
 
-    private long startTime;
-
     protected RenderScript mRS;
 
     protected Allocation mInAllocation;
@@ -58,13 +56,14 @@ public abstract class ImageFilter {
     }
 
     public void process() {
-        ProfileUtil.start("ImageFilter");
-        startTime = System.currentTimeMillis();
+        long startTime = System.currentTimeMillis();
         preProcess();
         _preProcess();
         Log.d("profile", getClass().getSimpleName() + " preProcess use " + (System.currentTimeMillis() - startTime));
+        startTime = System.currentTimeMillis();
         _process();
         Log.d("profile", getClass().getSimpleName() + " process use " + (System.currentTimeMillis() - startTime));
+        startTime = System.currentTimeMillis();
         _postProcess();
         postProcess();
         Log.d("profile", getClass().getSimpleName() + " postProcess use " + (System.currentTimeMillis() - startTime));
