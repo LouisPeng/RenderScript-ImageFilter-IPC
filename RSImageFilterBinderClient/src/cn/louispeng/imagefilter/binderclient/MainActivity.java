@@ -202,7 +202,6 @@ public class MainActivity extends Activity implements ServiceConnection {
                     }
 
                     mTestIndex++;
-
                 }
             }
 
